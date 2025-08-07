@@ -679,18 +679,18 @@ int main(int argc, char** argv)
     kf.init_dyn_share(get_f, df_dx, df_dw, h_share_model, NUM_MAX_ITERATIONS, epsi);
 
     /*** debug record ***/
-    FILE *fp;
-    string pos_log_dir = root_dir + "/Log/pos_log.txt";
-    fp = fopen(pos_log_dir.c_str(),"w");
+    // FILE *fp;
+    // string pos_log_dir = root_dir + "/Log/pos_log.txt";
+    // fp = fopen(pos_log_dir.c_str(),"w");
 
-    ofstream fout_pre, fout_out, fout_dbg;
-    fout_pre.open(DEBUG_FILE_DIR("mat_pre.txt"),ios::out);
-    fout_out.open(DEBUG_FILE_DIR("mat_out.txt"),ios::out);
-    fout_dbg.open(DEBUG_FILE_DIR("dbg.txt"),ios::out);
-    if (fout_pre && fout_out)
-        cout << "~~~~"<<ROOT_DIR<<" file opened" << endl;
-    else
-        cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
+    // ofstream fout_pre, fout_out, fout_dbg;
+    // fout_pre.open(DEBUG_FILE_DIR("mat_pre.txt"),ios::out);
+    // fout_out.open(DEBUG_FILE_DIR("mat_out.txt"),ios::out);
+    // fout_dbg.open(DEBUG_FILE_DIR("dbg.txt"),ios::out);
+    // if (fout_pre && fout_out)
+    //     cout << "~~~~"<<ROOT_DIR<<" file opened" << endl;
+    // else
+    //     cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
 
     /*** ROS subscribe initialization ***/
     ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
@@ -706,11 +706,11 @@ int main(int argc, char** argv)
         pure_localization_.reset(new ReLocalization(map_path));
         //! Define sensor data interface.
         ReLocalization& pure_localization = *pure_localization_;
-        ros::Subscriber goal = nh.subscribe<geometry_msgs::PoseStamped>("/move_base_simple/goal", 5, 
+        ros::Subscriber goal = nh.subscribe<geometry_msgs::PoseStamped>("/init_pose", 5, 
                                                                         &ReLocalization::GetInitialPose, &pure_localization);
         //! 
         ros::Publisher pubGlobalLocalization= nh.advertise<nav_msgs::Odometry> ("/global_localization", 100000);
-        ros::Publisher pub_map = nh.advertise<sensor_msgs::PointCloud2> ("/pcl_map", 1);
+        ros::Publisher pub_map = nh.advertise<sensor_msgs::PointCloud2> ("/pcl_map", 1, true);
         ros::Publisher pub_local_map = nh.advertise<sensor_msgs::PointCloud2> ("/local_map", 1);
         pcl::PointCloud<pcl::PointXYZINormal> map_pt;
         sensor_msgs::PointCloud2 output;

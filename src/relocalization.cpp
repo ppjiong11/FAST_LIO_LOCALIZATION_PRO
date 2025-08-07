@@ -159,10 +159,10 @@ bool ReLocalization::NDTMatch(const pcl::PointCloud<pcl::PointXYZINormal>::Ptr i
   // Setting maximum step size for More-Thuente line search.
   ndt.setStepSize (0.1);
   //Setting Resolution of NDT grid structure (VoxelGridCovariance).
-  ndt.setResolution (1.0);
+  ndt.setResolution (0.3);
 
   // Setting max number of registration iterations.
-  ndt.setMaximumIterations (35);
+  ndt.setMaximumIterations (10);
 
   // Setting point cloud to be aligned.
   ndt.setInputSource (in);

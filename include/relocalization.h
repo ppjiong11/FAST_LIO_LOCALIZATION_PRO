@@ -99,7 +99,14 @@ public:
         initial_pose_(2, 2) = R[2][2];
         // goal->pose.orientation.quaternion.
         has_initial_pose_ = true;
+        relocalzation_flag_ = true;  // 重新启用重定位标志
         std::cout << "Get initial pose from rivz =\n " << initial_pose_ << std::endl;
+    }
+    
+    //! 重置重定位标志，允许重新重定位
+    void ResetRelocalizationFlag() {
+        relocalzation_flag_ = true;
+        std::cout << "Relocalization flag reset, ready for relocalization" << std::endl;
     }
 
     //! get map

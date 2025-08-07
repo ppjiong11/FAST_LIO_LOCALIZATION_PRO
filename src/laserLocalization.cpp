@@ -748,17 +748,31 @@ int main(int argc, char** argv)
                     std::cout <<  "###WARNING: IMU meas Empty!!!"<<std::endl;  
                     continue;
                 };
-                if (flg_first_scan) {
-                    first_lidar_time = Measures.lidar_beg_time;
-                    p_imu->first_lidar_time = first_lidar_time;
-                    flg_first_scan = false;
+                
+                // 检查是否需要重新重定位
+                if (flg_first_scan || pure_localization_->GetRelocalizationFlag()) {
+                    if (flg_first_scan) {
+                        first_lidar_time = Measures.lidar_beg_time;
+                        p_imu->first_lidar_time = first_lidar_time;
+                        flg_first_scan = false;
+                    }
+                    
                     if (Measures.imu.size() < MAX_INI_COUNT) {
                         std::cout << "WARNING: There is not enough imu meas for initilization!!!"<< std::endl;
                         flg_first_scan = true;
                         continue;
                     }
+                    
+                    std::cout << "Attempting relocalization..." << std::endl;
                     if (pure_localization_->reLocalization(Measures.lidar, local_map_ptr, estimation_pose)) {
                         std::cout << "Successfully relocalize, and its pose: \n " << estimation_pose << std::endl;
+                        // 重定位成功，重置ESKF
+                        Eigen::Vector3d t(estimation_pose(0,3), estimation_pose(1,3), estimation_pose(2,3));
+                        Eigen::Matrix3d r;
+                        r = estimation_pose.block<3,3>(0,0).cast<double>();
+                        std::cout << "------>Re-initialization t = " << t.transpose() << std::endl;
+                        p_imu->Process(Measures, kf, feats_undistort, t, r);
+                        pure_localization_->SetRelocalizationFlag();
                     } else {
                         std::cout << "Continue to relocalization pose " << std::endl;
                         flg_first_scan = true;
@@ -775,16 +789,9 @@ int main(int argc, char** argv)
                 solve_const_H_time = 0;
                 svd_time   = 0;
                 t0 = omp_get_wtime();
-                if (!pure_localization_->GetRelocalizationFlag()) {
-                    Eigen::Vector3d t(estimation_pose(0,3), estimation_pose(1,3), estimation_pose(2,3));
-                    Eigen::Matrix3d r;
-                    r = estimation_pose.block<3,3>(0,0).cast<double>();
-                    std::cout << "------>Initialization t = " << t.transpose() << std::endl;
-                    p_imu->Process(Measures, kf, feats_undistort, t, r);
-                    pure_localization_->SetRelocalizationFlag();
-                } else {
-                    p_imu->Process(Measures, kf, feats_undistort);
-                }
+                
+                // 正常的ESKF处理
+                p_imu->Process(Measures, kf, feats_undistort);
                 
                 state_point = kf.get_x();
 

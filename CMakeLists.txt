@@ -71,6 +71,7 @@ include_directories(
 add_message_files(
   FILES
   Pose6D.msg
+  RelocalizationMsg.msg
 )
 
 generate_messages(

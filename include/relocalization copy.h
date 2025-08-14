@@ -97,8 +97,9 @@ public:
         initial_pose_(2, 0) = R[2][0];
         initial_pose_(2, 1) = R[2][1];
         initial_pose_(2, 2) = R[2][2];
-        // goal->pose.orientation.quaternion.
+        
         has_initial_pose_ = true;
+        relocalzation_flag_ = true;  // 重置重定位标志，确保能够触发新的重定位
         std::cout << "Get initial pose from rivz =\n " << initial_pose_ << std::endl;
     }
 
@@ -122,6 +123,10 @@ public:
 
     void SetExit() {
          exit_ = true;
+    }
+
+    void ResetForRelocalization() {
+        relocalzation_flag_ = true;
     }
 
 

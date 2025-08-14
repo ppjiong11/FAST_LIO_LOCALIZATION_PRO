@@ -679,18 +679,18 @@ int main(int argc, char** argv)
     kf.init_dyn_share(get_f, df_dx, df_dw, h_share_model, NUM_MAX_ITERATIONS, epsi);
 
     /*** debug record ***/
-    FILE *fp;
-    string pos_log_dir = root_dir + "/Log/pos_log.txt";
-    fp = fopen(pos_log_dir.c_str(),"w");
+    // FILE *fp;
+    // string pos_log_dir = root_dir + "/Log/pos_log.txt";
+    // fp = fopen(pos_log_dir.c_str(),"w");
 
-    ofstream fout_pre, fout_out, fout_dbg;
-    fout_pre.open(DEBUG_FILE_DIR("mat_pre.txt"),ios::out);
-    fout_out.open(DEBUG_FILE_DIR("mat_out.txt"),ios::out);
-    fout_dbg.open(DEBUG_FILE_DIR("dbg.txt"),ios::out);
-    if (fout_pre && fout_out)
-        cout << "~~~~"<<ROOT_DIR<<" file opened" << endl;
-    else
-        cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
+    // ofstream fout_pre, fout_out, fout_dbg;
+    // fout_pre.open(DEBUG_FILE_DIR("mat_pre.txt"),ios::out);
+    // fout_out.open(DEBUG_FILE_DIR("mat_out.txt"),ios::out);
+    // fout_dbg.open(DEBUG_FILE_DIR("dbg.txt"),ios::out);
+    // if (fout_pre && fout_out)
+    //     cout << "~~~~"<<ROOT_DIR<<" file opened" << endl;
+    // else
+    //     cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
 
     /*** ROS subscribe initialization ***/
     ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
@@ -701,9 +701,7 @@ int main(int argc, char** argv)
         ros::Rate loop_rate(1000);
         bool status = ros::ok();
         //INPUT YOUR PATH
-        std::string map_path;
-        nh.param<string>("map_path", map_path,"");
-        // std::string map_path = root_dir + "/PCD/scans.pcd";
+        std::string map_path = root_dir + "/PCD/scans.pcd";
         std::unique_ptr<ReLocalization> pure_localization_;
         pure_localization_.reset(new ReLocalization(map_path));
         //! Define sensor data interface.
@@ -744,6 +742,26 @@ int main(int argc, char** argv)
                 loop_rate.sleep();
                 continue;
             }
+            
+            // 检查是否需要重新进行重定位
+            if (pure_localization_->GetRelocalizationFlag() && !flg_first_scan) {
+                // 重置状态，准备重新进行重定位
+                flg_first_scan = true;
+                flg_EKF_inited = false;
+                // 清除缓冲区
+                lidar_buffer.clear();
+                imu_buffer.clear();
+                time_buffer.clear();
+                // 重置IMU处理器
+                p_imu.reset(new ImuProcess());
+                p_imu->set_extrinsic(Lidar_T_wrt_IMU, Lidar_R_wrt_IMU);
+                p_imu->set_gyr_cov(V3D(gyr_cov, gyr_cov, gyr_cov));
+                p_imu->set_acc_cov(V3D(acc_cov, acc_cov, acc_cov));
+                p_imu->set_gyr_bias_cov(V3D(b_gyr_cov, b_gyr_cov, b_gyr_cov));
+                p_imu->set_acc_bias_cov(V3D(b_acc_cov, b_acc_cov, b_acc_cov));
+                // 清除之前的状态
+                std::cout << "***** Resetting for new relocalization *****" << std::endl;
+            }
             if(sync_packages(Measures)) {
                 if(Measures.imu.empty()) {
                     loop_rate.sleep();
@@ -761,6 +779,18 @@ int main(int argc, char** argv)
                     }
                     if (pure_localization_->reLocalization(Measures.lidar, local_map_ptr, estimation_pose)) {
                         std::cout << "Successfully relocalize, and its pose: \n " << estimation_pose << std::endl;
+                        // 重定位成功后，清除之前的状态和缓冲区
+                        ikdtree.Root_Node = nullptr;  // 清除ikd tree
+                        Localmap_Initialized = false;  // 重置local map初始化标志
+                        // 清除路径信息
+                        path.poses.clear();
+                        // 重置时间和统计变量
+                        total_distance = 0;
+                        scan_count = 0;
+                        publish_count = 0;
+                        // 重定位成功后，设置EKF为未初始化状态，但会在后续处理中通过时间判断完成初始化
+                        flg_EKF_inited = false;
+                        std::cout << "***** Cleared previous states after successful relocalization *****" << std::endl;
                     } else {
                         std::cout << "Continue to relocalization pose " << std::endl;
                         flg_first_scan = true;
@@ -777,13 +807,12 @@ int main(int argc, char** argv)
                 solve_const_H_time = 0;
                 svd_time   = 0;
                 t0 = omp_get_wtime();
-                if (!pure_localization_->GetRelocalizationFlag()) {
+                if (!flg_EKF_inited) {
                     Eigen::Vector3d t(estimation_pose(0,3), estimation_pose(1,3), estimation_pose(2,3));
                     Eigen::Matrix3d r;
                     r = estimation_pose.block<3,3>(0,0).cast<double>();
                     std::cout << "------>Initialization t = " << t.transpose() << std::endl;
                     p_imu->Process(Measures, kf, feats_undistort, t, r);
-                    pure_localization_->SetRelocalizationFlag();
                 } else {
                     p_imu->Process(Measures, kf, feats_undistort);
                 }
@@ -811,7 +840,12 @@ int main(int argc, char** argv)
                     ROS_WARN("No point, skip this scan!\n");
                     continue;
                 }
-                flg_EKF_inited = (Measures.lidar_beg_time - first_lidar_time) < INIT_TIME ? false : true;
+                if (!flg_EKF_inited) {
+                    flg_EKF_inited = (Measures.lidar_beg_time - first_lidar_time) >= INIT_TIME;
+                    if (flg_EKF_inited) {
+                        std::cout << "***** EKF initialization completed *****" << std::endl;
+                    }
+                }
                 /*** Segment the map in lidar FOV ***/
                 lasermap_fov_segment();
                 /*** downsample the feature points in a scan ***/
